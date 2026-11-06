@@ -1,6 +1,8 @@
 const GASTOS = ["Gasolina","Óleo","Manutenção","Pneu","Peças","Documentos e IPVA","Seguro","Multa","Alimentação","Celular e internet","Outros"];
 const ORIGENS = ["iFood","99","Uber","Lalamove","Particular","Gorjeta","Outros"];
 const CHAVE = "corre-de-moto-v1";
+const INTERVALO_OLEO = 1000; // km entre uma troca e outra
+const AVISO_OLEO = 200; // começa a avisar quando faltar isso
 const brl = v => (v<0?"-":"") + "R$ " + Math.abs(v).toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2});
 const n1 = v => v.toLocaleString("pt-BR",{maximumFractionDigits:1});
 const ymd = d => d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
@@ -26,6 +28,21 @@ function nomeMes(m){ const [a,b]=m.split("-").map(Number); return new Date(a,b-1
 function mudaMes(n){ const [a,b]=mes.split("-").map(Number); const d=new Date(a,b-1+n,1); mes=d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0"); render(); }
 $("ant").onclick=()=>mudaMes(-1); $("prox").onclick=()=>mudaMes(1);
 
+const trocas = () => todos.filter(l=>l.troca).sort((a,b)=>b.hodometro-a.hodometro);
+const kmAtual = () => Math.max(0,...todos.map(l=>Math.max(Number(l.kmFinal)||0,Number(l.kmInicial)||0,Number(l.hodometro)||0)));
+function estadoOleo(){
+  const u=trocas()[0]; if(!u) return null;
+  const prox=u.hodometro+INTERVALO_OLEO, atual=Math.max(kmAtual(),u.hodometro);
+  return {u,prox,atual,falta:prox-atual,rodado:atual-u.hodometro};
+}
+function textoOleo(){
+  const e=estadoOleo();
+  if(!e) return "Ainda não tem troca de óleo registrada.";
+  if(e.falta>0) return `Próxima troca de óleo com ${fmtKm(e.prox)} km. Faltam ${fmtKm(e.falta)} km.`;
+  return e.falta===0?`Hora de trocar o óleo: chegou em ${fmtKm(e.prox)} km.`:`Troca de óleo passou ${fmtKm(-e.falta)} km. Era com ${fmtKm(e.prox)} km.`;
+}
+const avisoOleo = () => { const e=estadoOleo(); return e&&e.falta<=AVISO_OLEO?textoOleo():""; };
+
 function resumo(lista){
   const r={ganho:0,gasto:0,km:0,horas:0,litros:0};
   for(const l of lista){
@@ -38,15 +55,32 @@ function resumo(lista){
 
 function renderHodo(){
   const a=aberto(), f=todos.filter(l=>l.tipo==="km"&&l.kmFinal&&l.data===hoje()).sort(recentes)[0];
-  const ult=Math.max(0,...todos.map(l=>Number(l.kmFinal)||0));
+  const ult=kmAtual();
   if(a) $("hEstado").textContent=`Iniciado com ${fmtKm(a.kmInicial)} km`+(a.data===hoje()?"":` em ${a.data.slice(8,10)}/${a.data.slice(5,7)}`);
   else if(f) $("hEstado").textContent=`Hoje: ${fmtKm(f.kmInicial)} → ${fmtKm(f.kmFinal)} = ${n1(Number(f.km))} km`;
   else $("hEstado").textContent=ult?`Dia não iniciado. Último km: ${fmtKm(ult)}`:"Dia ainda não iniciado";
   $("hBtn").textContent=a?"Finalizar o dia":"Iniciar o dia";
 }
 
+function renderOleo(){
+  const e=estadoOleo(), lista=trocas();
+  $("oProx").textContent=e?fmtKm(e.prox)+" km":"—";
+  $("oEstado").textContent=e?(e.falta>0?`Faltam ${fmtKm(e.falta)} km`:e.falta===0?"Hora de trocar":`Passou ${fmtKm(-e.falta)} km`):"Nenhuma troca registrada";
+  $("oleo").classList.toggle("alerta",!!e&&e.falta<=AVISO_OLEO);
+  $("oBarra").style.width=e?Math.min(100,e.rodado/INTERVALO_OLEO*100).toFixed(1)+"%":"0";
+  $("oRodado").textContent=e?`Rodou ${fmtKm(e.rodado)} de ${fmtKm(INTERVALO_OLEO)} km desde a última troca`:"Fale: óleo trocado com 76128, 40 reais no crédito";
+  $("oHist").innerHTML=lista.slice(0,5).map((l,i)=>{
+    const ant=lista[i+1], partes=[String(l.data).slice(8,10)+"/"+String(l.data).slice(5,7),fmtKm(l.hodometro)+" km"];
+    if(l.valor) partes.push(brl(Number(l.valor)));
+    if(l.pagamento) partes.push(l.pagamento);
+    if(ant) partes.push(`${fmtKm(l.hodometro-ant.hodometro)} km depois da anterior`);
+    return `<li>${esc(partes.join(" · "))}</li>`;
+  }).join("");
+}
+
 function render(){
   renderHodo();
+  renderOleo();
   $("mesNome").textContent=nomeMes(mes);
   const doMes=todos.filter(l=>String(l.data||"").startsWith(mes)).sort(recentes);
   const t=resumo(doMes);
@@ -73,7 +107,7 @@ function render(){
     const km=l.tipo==="km";
     const val=km?(l.kmInicial&&!l.kmFinal?"em aberto":`${n1(Number(l.km)||0)} km${l.horas?" · "+n1(Number(l.horas))+" h":""}`):`${l.tipo==="ganho"?"+":"−"} ${brl(Number(l.valor)||0).replace("R$ ","")}`;
     const tit=l.descricao||(km?(l.kmInicial?`${fmtKm(l.kmInicial)} → ${l.kmFinal?fmtKm(l.kmFinal):"…"}`:"Km rodado"):l.categoria)||"—";
-    const extra=l.litros?` · ${n1(Number(l.litros))} L`:"";
+    const extra=(l.litros?` · ${n1(Number(l.litros))} L`:"")+(l.pagamento?` · ${l.pagamento}`:"");
     return `<tr><td class="num">${esc(String(l.data).slice(8,10)+"/"+String(l.data).slice(5,7))}</td><td>${esc(tit)}${esc(extra)}</td><td><span class="chip">${esc(km?"Km":(l.categoria||"Outros"))}</span></td><td class="r num ${km?"":(l.tipo==="ganho"?"g":"b")}">${esc(val)}</td><td class="x"><button data-del="${esc(l.id)}" aria-label="Apagar lançamento">✕</button></td></tr>`;
   }).join(""):`<tr><td colspan="5" class="vazio">Nada lançado em ${esc(nomeMes(mes))}.</td></tr>`;
 }
@@ -102,7 +136,24 @@ function finalizar(valor,horas){
   return {txt:`Dia finalizado: ${fmtKm(a.kmInicial)} → ${fmtKm(v)} = ${fmtKm(a.km)} km`,desfazer:()=>{ a.kmFinal=0; a.km=0; a.horas=0; guardar(); }};
 }
 $("hBtn").onclick=()=>{
-  try{ const x=aberto()?finalizar($("hKm").value):iniciar($("hKm").value); $("hKm").value=""; render(); mostrar(x.txt,[x.desfazer]); }
+  try{ const x=aberto()?finalizar($("hKm").value):iniciar($("hKm").value); $("hKm").value=""; render(); const av=avisoOleo(); mostrar(x.txt+(av?"\n"+av:""),[x.desfazer]); }
+  catch(e){ mostrar(e.aviso||"Não consegui salvar. Tente de novo."); }
+};
+
+function registrarTroca(it){
+  let km=hodo(it.hodometro); const estimado=!km;
+  if(estimado) km=kmAtual();
+  if(!km) throw falha("Fale o km do painel junto. Exemplo: óleo trocado com 76128, 40 reais.");
+  const u=trocas()[0];
+  if(u&&km<=u.hodometro) throw falha(`O km da troca precisa ser maior que o da última, ${fmtKm(u.hodometro)}.`);
+  const valor=Math.round(num(it.valor)*100)/100;
+  const l=adicionar({data:/^\d{4}-\d{2}-\d{2}$/.test(it.data||"")?it.data:hoje(),tipo:"gasto",categoria:"Óleo",valor,troca:true,hodometro:km,pagamento:it.pagamento||"",descricao:`Troca de óleo com ${fmtKm(km)} km`,criado:Date.now()});
+  mes=l.data.slice(0,7);
+  const txt=`Troca de óleo com ${fmtKm(km)} km`+(valor?`, ${brl(valor)}`:"")+(l.pagamento?`, ${l.pagamento}`:"")+`. Próxima com ${fmtKm(km+INTERVALO_OLEO)} km.`+(estimado?" Usei o último km anotado.":"");
+  return {txt,desfazer:()=>apagar(l.id)};
+}
+$("oBtn").onclick=()=>{
+  try{ const x=registrarTroca({hodometro:$("oKm").value,valor:$("oValor").value,pagamento:$("oPag").value}); $("oKm").value=""; $("oValor").value=""; $("oPag").value=""; render(); mostrar(x.txt,[x.desfazer]); }
   catch(e){ mostrar(e.aviso||"Não consegui salvar. Tente de novo."); }
 };
 
@@ -110,7 +161,7 @@ function normaliza(it){
   const tipo=["ganho","gasto","km"].includes(it.tipo)?it.tipo:"gasto";
   const o={ data:/^\d{4}-\d{2}-\d{2}$/.test(it.data||"")?it.data:hoje(), tipo, descricao:String(it.descricao||"").slice(0,120), criado:Date.now() };
   if(tipo==="km"){ o.km=Math.round(num(it.km)*10)/10; o.horas=Math.round(num(it.horas)*10)/10; }
-  else { o.valor=Math.round(num(it.valor)*100)/100; const lista=tipo==="ganho"?ORIGENS:GASTOS; o.categoria=lista.includes(it.categoria)?it.categoria:"Outros"; if(tipo==="gasto"&&num(it.litros)) o.litros=Math.round(num(it.litros)*100)/100; }
+  else { o.valor=Math.round(num(it.valor)*100)/100; const lista=tipo==="ganho"?ORIGENS:GASTOS; o.categoria=lista.includes(it.categoria)?it.categoria:"Outros"; if(tipo==="gasto"&&num(it.litros)) o.litros=Math.round(num(it.litros)*100)/100; if(tipo==="gasto"&&it.pagamento) o.pagamento=it.pagamento; }
   return o;
 }
 const valido = i => i.tipo==="km" ? i.km>0 : i.valor>0;
@@ -139,7 +190,7 @@ function falar(txt){
   if(!("speechSynthesis" in window)) return;
   const u=new SpeechSynthesisUtterance(txt.replace(/→/g,"até").replace(/R\$ /g,"").replace(/[−+·]/g," ")); u.lang="pt-BR"; speechSynthesis.cancel(); speechSynthesis.speak(u);
 }
-const linhaItem = i => i.tipo==="km" ? `${n1(i.km)} km${i.horas?" em "+n1(i.horas)+" h":""}` : `${i.tipo==="ganho"?"Ganho":"Gasto"} ${brl(i.valor)}, ${i.categoria}${i.litros?", "+n1(i.litros)+" litros":""}`;
+const linhaItem = i => i.tipo==="km" ? `${n1(i.km)} km${i.horas?" em "+n1(i.horas)+" h":""}` : `${i.tipo==="ganho"?"Ganho":"Gasto"} ${brl(i.valor)}, ${i.categoria}${i.litros?", "+n1(i.litros)+" litros":""}${i.pagamento?", "+i.pagamento:""}`;
 
 function respondePeriodo(p){
   const h=hoje(); let lista, nome;
@@ -154,12 +205,13 @@ function respondePeriodo(p){
 function comando(texto){
   const txt=String(texto||"").trim(); if(!txt) return;
   const r=interpretar(txt,hoje());
-  if(r.pergunta){ const a=respondePeriodo(r.pergunta); mostrar(a); falar(a); $("cmd").value=""; return; }
-  const itens=r.itens.filter(i=>i.tipo!=="inicio"&&i.tipo!=="fim").map(normaliza).filter(valido);
-  const odos=r.itens.filter(i=>i.tipo==="inicio"||i.tipo==="fim");
+  if(r.pergunta){ const a=r.pergunta==="oleo"?textoOleo():respondePeriodo(r.pergunta); mostrar(a); falar(a); $("cmd").value=""; return; }
+  const especiais=["inicio","fim","troca"];
+  const itens=r.itens.filter(i=>!especiais.includes(i.tipo)).map(normaliza).filter(valido);
+  const odos=r.itens.filter(i=>especiais.includes(i.tipo));
   const desfazer=[], linhas=[];
   try{
-    for(const o of odos){ const x=o.tipo==="inicio"?iniciar(o.hodometro,o.data):finalizar(o.hodometro,o.horas); desfazer.push(x.desfazer); linhas.push(x.txt); }
+    for(const o of odos){ const x=o.tipo==="troca"?registrarTroca(o):o.tipo==="inicio"?iniciar(o.hodometro,o.data):finalizar(o.hodometro,o.horas); desfazer.push(x.desfazer); linhas.push(x.txt); }
   }catch(e){ for(const f of desfazer.slice().reverse()) f(); render(); const m=e.aviso||"Não consegui salvar."; mostrar(m); falar(m); return; }
   for(const it of itens){ const l=adicionar(it); desfazer.push(()=>apagar(l.id)); linhas.push(linhaItem(it)); }
   if(r.horasSoltas){
@@ -167,6 +219,7 @@ function comando(texto){
     if(k){ const antes=k.horas; k.horas=r.horasSoltas; guardar(); desfazer.push(()=>{ k.horas=antes; guardar(); }); linhas.push(`${n1(r.horasSoltas)} horas trabalhadas`); }
   }
   if(!linhas.length){ const m=`Não entendi: "${txt}". Tente assim: ganhei 210 no iFood.`; mostrar(m); falar("Não entendi. Fale de novo."); return; }
+  if(odos.length&&!odos.some(o=>o.tipo==="troca")){ const av=avisoOleo(); if(av) linhas.push(av); }
   $("cmd").value=""; if(itens[0]) mes=itens[0].data.slice(0,7); render();
   const fim=r.naoEntendi.length?`\nNão entendi: ${r.naoEntendi.join("; ")}`:"";
   mostrar(linhas.join("\n")+fim,desfazer); falar(linhas.join(". "));

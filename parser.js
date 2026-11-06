@@ -21,23 +21,52 @@
     [/\bparticular\b/,"Particular"],
     [/\bgorjeta\b/,"Gorjeta"],
   ];
+  const PAGAMENTOS=[
+    [/\b(?:no|na|pelo|com)\s+(?:cartao\s+de\s+)?credito\b|\bcartao\b(?!\s+de\s+debito)/,"Crédito"],
+    [/\b(?:no|na|pelo|com)\s+(?:cartao\s+de\s+)?debito\b/,"Débito"],
+    [/\bpix\b/,"Pix"],
+    [/\bem dinheiro\b|\ba vista\b/,"Dinheiro"],
+  ];
+  // o que vem depois da frase da troca e já é outro assunto
+  const OUTRO_ASSUNTO=/ganhei|recebi|faturei|inici|comec|termin|finaliz|abasteci|gasolina|almoc|lanche|i ?food|uber|rodei/;
+  const ehTroca=c=>/\btro[cq]\w*\b.*\boleo\b|\boleo\b.*\btro[cq]\w*/.test(c)||(/\boleo\b/.test(c)&&/\b\d{4,}\b(?!\s*reais)/.test(c));
+  function lerTroca(c){
+    let s=c,valor=0,km=0,m;
+    if((m=s.match(/(\d+(?:[.,]\d{1,2})?)\s*(?:reais|real|contos?|pilas?)\b/))){ valor=paraNum(m[1]); s=s.replace(m[0]," "); }
+    if((m=s.match(/(\d{3,})\s*(?:kms?|quilometros?)\b/)||s.match(/(?:kms?|quilometros?|quilometragem|hodometro)\D{0,10}(\d{3,})/))){ km=paraNum(m[1]); s=s.replace(m[0]," "); }
+    const nums=(s.match(/\d+(?:[.,]\d{1,2})?/g)||[]).map(paraNum);
+    if(!km){ const grandes=nums.filter(x=>x>=1000); if(grandes.length){ km=Math.max(...grandes); nums.splice(nums.indexOf(km),1); } }
+    if(!valor&&nums.length) valor=nums[0];
+    return {hodometro:Math.round(km),valor};
+  }
   const semAcento=s=>s.normalize("NFD").replace(/[̀-ͯ]/g,"").toLowerCase();
   const paraNum=s=>parseFloat(String(s).replace(",","."));
   function diaAntes(hoje,n){ const [a,m,d]=hoje.split("-").map(Number); const x=new Date(a,m-1,d-n); return x.getFullYear()+"-"+String(x.getMonth()+1).padStart(2,"0")+"-"+String(x.getDate()).padStart(2,"0"); }
 
   window.interpretar=function(texto,hoje){
     let t=" "+semAcento(texto)+" ";
-    t=t.replace(/r\$\s*/g,"").replace(/(\d)\.(?=\d{3}\b)/g,"$1").replace(/\b(\d{1,3}) (\d{3})\b/g,"$1$2");
+    // o ditado do celular costuma trocar "óleo" por "olha" ou "olho"
+    t=t.replace(/\bolh[ao](?: o)? tro([cq])/g,"oleo tro$1").replace(/\b(troquei|trocar|trocado|troca|troca de|troca do)\s+(?:o\s+)?olh[ao]\b/g,"$1 o oleo");
+    t=t.replace(/r\$\s*(\d[\d.,]*)/g,"$1 reais ").replace(/r\$\s*/g,"").replace(/(\d)\.(?=\d{3}\b)/g,"$1").replace(/\b(\d{1,3}) (\d{3})\b/g,"$1$2");
     t=t.replace(/\b[a-z]+\b/g,w=>PALAVRAS[w]!==undefined?PALAVRAS[w]:w);
     const data=/\banteontem\b/.test(t)?diaAntes(hoje,2):/\bontem\b/.test(t)?diaAntes(hoje,1):hoje;
+
+    if(/\boleo\b/.test(t)&&/\bquando\b|\bqual\b|proxim|\bfalta/.test(t)&&!/\btroquei\b|\btrocado\b/.test(t)) return {itens:[],naoEntendi:[],horasSoltas:0,data,pergunta:"oleo"};
 
     let horas=0,litros=0,m;
     if((m=t.match(/(\d+(?:[.,]\d+)?)\s*(?:h|hrs?|horas?)\b/))){ horas=paraNum(m[1]); t=t.replace(m[0]," "); }
     if((m=t.match(/(\d+(?:[.,]\d+)?)\s*(?:l|litros?)\b/))){ litros=paraNum(m[1]); t=t.replace(m[0]," "); }
 
     const itens=[], naoEntendi=[]; let ultimo=null;
-    for(let c of t.split(/\s*[,;]\s+|\.\s+|\s+e\s+|\s+depois\s+|\s+tambem\s+/)){
-      c=c.trim(); if(!c) continue;
+    const partes=t.split(/\s*[,;]\s+|\.\s+|\s+e\s+|\s+depois\s+|\s+tambem\s+/).map(c=>c.trim()).filter(Boolean);
+    let p=partes.findIndex(ehTroca);
+    if(p>=0){
+      let fim=p+1; while(fim<partes.length&&!OUTRO_ASSUNTO.test(partes[fim])&&!ehTroca(partes[fim])) fim++;
+      if(p>0&&/^\D*\d{4,}\D*$/.test(partes[p-1])&&!OUTRO_ASSUNTO.test(partes[p-1])) p--;
+      itens.push({tipo:"troca",...lerTroca(partes.slice(p,fim).join(" ")),data});
+      partes.splice(p,fim-p);
+    }
+    for(let c of partes){
       let origem=null;
       for(const [re,nome] of ORIGENS){ if(re.test(c)){ origem=nome; c=c.replace(re," "); break; } }
       const n=c.match(/\d+(?:[.,]\d{1,2})?/);
@@ -54,6 +83,8 @@
       itens.push({tipo,valor:v,categoria:tipo==="gasto"?(cat||"Outros"):(origem||"Outros"),data,descricao:""});
       ultimo=tipo;
     }
+    const pagamento=(PAGAMENTOS.find(([re])=>re.test(t))||[])[1];
+    if(pagamento) for(const i of itens) if(i.tipo==="gasto"||i.tipo==="troca") i.pagamento=pagamento;
     if(litros){ const g=itens.find(i=>i.categoria==="Gasolina"); if(g) g.litros=litros; }
     let horasSoltas=0;
     if(horas){ const k=itens.find(i=>i.tipo==="fim"||i.tipo==="km"); if(k) k.horas=horas; else horasSoltas=horas; }

@@ -100,6 +100,21 @@ input,select{font:inherit;color:var(--ink);background:var(--bg);border:1px solid
 .backup label{display:inline-flex;justify-content:center;font-size:1rem;color:var(--ink);background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:9px 14px;cursor:pointer}
 .backup input{display:none}
 #cmd{min-height:64px}
+.oleo{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:12px 14px;display:flex;flex-direction:column;gap:8px}
+.oleo.alerta{border-color:var(--bad);border-width:2px}
+.oleo p{margin:0}
+.oleo .topo{display:flex;justify-content:space-between;align-items:baseline;gap:12px;flex-wrap:wrap}
+.oleo .topo b{font-family:var(--mono);font-weight:400;font-size:1.5rem;font-variant-numeric:tabular-nums}
+.oleo #oEstado{font-weight:700}
+.oleo.alerta #oEstado{color:var(--bad)}
+.oleo .trilho{height:10px;background:var(--bg);border-radius:5px;overflow:hidden}
+.oleo .trilho i{display:block;height:100%;background:var(--accent)}
+.oleo.alerta .trilho i{background:var(--bad)}
+.oleo ul{margin:0;padding-left:18px;color:var(--muted);font-size:.88rem}
+.oleo ul:empty{display:none}
+.oleo .campos{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px}
+.oleo .campos input,.oleo .campos select{min-width:0;width:100%}
+.oleo .campos select,.oleo .campos button{grid-column:1/-1}
 </style>
 </head>
 <body>
@@ -127,6 +142,23 @@ input,select{font:inherit;color:var(--ink);background:var(--bg);border:1px solid
     </div>
   </section>
 
+  <section id="oleo" class="oleo" aria-label="Troca de óleo">
+    <h2 style="margin:0">Troca de óleo</h2>
+    <div class="topo"><div><small>Próxima troca com</small><br><b id="oProx">—</b></div><span id="oEstado"></span></div>
+    <div class="trilho"><i id="oBarra"></i></div>
+    <p class="dica" id="oRodado"></p>
+    <ul id="oHist"></ul>
+    <details>
+      <summary>Lançar troca na mão</summary>
+      <div class="campos">
+        <input id="oKm" inputmode="numeric" placeholder="Km no painel" aria-label="Km no painel na troca">
+        <input id="oValor" inputmode="decimal" placeholder="Valor (R$)" aria-label="Valor da troca">
+        <select id="oPag" aria-label="Forma de pagamento"><option value="">Forma de pagamento</option><option>Crédito</option><option>Débito</option><option>Pix</option><option>Dinheiro</option></select>
+        <button id="oBtn" class="prim" type="button">Registrar troca</button>
+      </div>
+    </details>
+  </section>
+
   <section class="ind" aria-label="Indicadores">
     <div><small>Lucro por km</small><b id="iLucroKm">—</b></div>
     <div><small>Custo por km</small><b id="iCustoKm">—</b></div>
@@ -142,7 +174,7 @@ input,select{font:inherit;color:var(--ink);background:var(--bg);border:1px solid
       <textarea id="cmd" rows="2" placeholder="O que você falar aparece aqui. Também dá pra digitar."></textarea>
       <button id="enviar" class="prim">Enviar</button>
     </div>
-    <p class="dica">Exemplos: iniciei com 45320 · terminei com 45450 · ganhei 210 no iFood · abasteci 40 reais, 6 litros · quanto lucrei essa semana?</p>
+    <p class="dica">Exemplos: iniciei com 45320 · terminei com 45450 · ganhei 210 no iFood · abasteci 40 reais, 6 litros · óleo trocado com 76128, 40 reais no crédito · quando troco o óleo? · quanto lucrei essa semana?</p>
     <div id="resp" class="resp" hidden></div>
   </section>
 
