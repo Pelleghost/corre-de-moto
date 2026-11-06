@@ -315,4 +315,25 @@ function consertarKmComoDinheiro(){
 const consertados=consertarKmComoDinheiro();
 render();
 if(consertados) mostrar(`Corrigi ${consertados===1?"1 lançamento":consertados+" lançamentos"} em que o km do painel tinha entrado como dinheiro. Veja em Lançamentos do mês.`);
+// link que lança ganhos com um toque: #ganhos=Uber~2026-11-02_130.21_3.87_11_3h52_12~...
+// cada dia: data_total_horas_viagens_online_promoção. Fica depois do #, então não vai pro servidor.
+function lerLinkGanhos(){
+  const m=decodeURIComponent(location.hash).match(/^#ganhos=([^~]+)~(.+)$/); if(!m) return;
+  history.replaceState(null,"",location.pathname+location.search);
+  const origem=ORIGENS.includes(m[1])?m[1]:"Outros", br=v=>v.toFixed(2).replace(".",","), novos=[], ids=new Set(todos.map(l=>l.id));
+  for(const dia of m[2].split("~")){
+    const [d,total,horas,viagens,online,promo]=dia.split("_"), v=Number(total), h=Number(horas), p=Number(promo)||0;
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(d)||!(v>0&&v<VALOR_MAX)) continue;
+    const extra=p?` (${br(v-p)} + ${br(p)} de promoção)`:"", criado=Date.now()+novos.length;
+    novos.push({id:`video-ganho-${d}`,data:d,tipo:"ganho",valor:v,categoria:origem,descricao:`${viagens} viagens, ${online} online${extra}`,criado});
+    if(h>0) novos.push({id:`video-horas-${d}`,data:d,tipo:"km",km:0,horas:h,descricao:`${online} online`,criado:criado+1});
+  }
+  const entrar=novos.filter(l=>!ids.has(l.id));
+  if(!entrar.length) return mostrar("Esses ganhos já estavam lançados. Nada mudou.");
+  todos=[...todos,...entrar]; guardar(); mes=entrar[0].data.slice(0,7); render();
+  const soma=entrar.filter(l=>l.tipo==="ganho"), total=soma.reduce((t,l)=>t+l.valor,0), saem=new Set(entrar.map(l=>l.id));
+  mostrar(`Lancei ${soma.length} ${soma.length===1?"dia":"dias"} de ganhos: ${brl(total)}.`,[()=>{ todos=todos.filter(l=>!saem.has(l.id)); guardar(); }]);
+}
+lerLinkGanhos();
+window.addEventListener("hashchange",lerLinkGanhos);
 if("serviceWorker" in navigator&&location.protocol==="https:") navigator.serviceWorker.register("sw.js").catch(()=>{});
