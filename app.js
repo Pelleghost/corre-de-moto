@@ -17,6 +17,7 @@ const aberto = () => todos.filter(l=>l.tipo==="km"&&l.kmInicial>0&&!l.kmFinal).s
 function esc(s){ const d=document.createElement("div"); d.textContent=s==null?"":String(s); return d.innerHTML; }
 
 let todos=[], mes=hoje().slice(0,7);
+const diasAbertos=new Set(), catsAbertas=new Set();
 try{ todos=JSON.parse(localStorage.getItem(CHAVE))||[]; }catch{ todos=[]; }
 function guardar(){ try{ localStorage.setItem(CHAVE,JSON.stringify(todos)); }catch{ mostrar("Não consegui guardar no celular. Libere espaço e tente de novo."); } }
 if(navigator.storage&&navigator.storage.persist) navigator.storage.persist().catch(()=>{});
@@ -62,6 +63,32 @@ function renderHodo(){
   $("hBtn").textContent=a?"Finalizar o dia":"Iniciar o dia";
 }
 
+const diaMes = d => String(d).slice(8,10)+"/"+String(d).slice(5,7);
+function itemDetalhe(l,comDia){
+  const dia=comDia?[diaMes(l.data)]:[];
+  if(l.tipo==="km"){
+    const tit=l.kmInicial?`${fmtKm(l.kmInicial)} → ${l.kmFinal?fmtKm(l.kmFinal):"…"}`:"Km rodado";
+    const sub=[...dia,l.kmInicial&&!l.kmFinal?"em aberto":`${n1(Number(l.km)||0)} km`]; if(l.horas) sub.push(n1(Number(l.horas))+" h");
+    return `<li><div><b>${esc(tit)}</b><small>${esc(sub.join(" · "))}</small></div></li>`;
+  }
+  const sub=[...dia]; if(l.descricao) sub.push(l.categoria); if(l.litros) sub.push(n1(Number(l.litros))+" L"); if(l.pagamento) sub.push(l.pagamento);
+  const ganho=l.tipo==="ganho";
+  return `<li><div><b>${esc(l.descricao||l.categoria||"—")}</b>${sub.length?`<small>${esc(sub.join(" · "))}</small>`:""}<button class="ed" type="button" data-edit="${esc(l.id)}">${l.descricao?"editar":"descrever"}</button></div><span class="num ${ganho?"g":"b"}">${ganho?"+":"−"} ${esc(brl(Number(l.valor)||0).replace("R$ ",""))}</span></li>`;
+}
+function editarDescricao(e){
+  const b=e.target.closest("button[data-edit]"); if(!b) return false;
+  const l=todos.find(x=>x.id===b.dataset.edit); if(!l) return true;
+  const novo=window.prompt("O que foi esse lançamento?",l.descricao||"");
+  if(novo!==null){ l.descricao=novo.trim().slice(0,120); guardar(); render(); }
+  return true;
+}
+function textoDia(d){
+  const lista=todos.filter(l=>l.data===d).sort((a,b)=>(a.criado||0)-(b.criado||0)), r=resumo(lista);
+  if(!lista.length) return `Nada lançado em ${diaMes(d)}.`;
+  const itens=lista.filter(l=>l.tipo!=="km").map(l=>`${l.tipo==="ganho"?"+":"−"} ${brl(Number(l.valor)||0)}: ${l.descricao||l.categoria}`);
+  return [`Dia ${diaMes(d)}: ganhou ${brl(r.ganho)}, gastou ${brl(r.gasto)}, rodou ${n1(r.km)} km.`,...itens].join("\n");
+}
+
 function renderOleo(){
   const e=estadoOleo(), lista=trocas();
   $("oProx").textContent=e?fmtKm(e.prox)+" km":"—";
@@ -95,12 +122,14 @@ function render(){
   const dias={}; for(const l of doMes){ (dias[l.data]=dias[l.data]||[]).push(l); }
   const chaves=Object.keys(dias).sort().reverse();
   $("dias").innerHTML=chaves.length?chaves.map(d=>{ const r=resumo(dias[d]);
-    return `<tr><td class="num">${esc(d.slice(8,10)+"/"+d.slice(5,7))}</td><td class="r num">${r.km?n1(r.km):"—"}</td><td class="r num">${r.horas?n1(r.horas):"—"}</td><td class="r num g">${brl(r.ganho).replace("R$ ","")}</td><td class="r num b">${brl(r.gasto).replace("R$ ","")}</td><td class="r num ${r.lucro<0?"b":"g"}">${brl(r.lucro).replace("R$ ","")}</td></tr>`; }).join("")
+    const aberto_=diasAbertos.has(d);
+    const det=aberto_?`<tr class="det"><td colspan="6"><ul class="lista">${dias[d].slice().sort((a,b)=>(a.criado||0)-(b.criado||0)).map(l=>itemDetalhe(l)).join("")}</ul></td></tr>`:"";
+    return `<tr class="dia" data-dia="${esc(d)}"><td class="num"><span class="seta">${aberto_?"▾":"▸"}</span> ${esc(d.slice(8,10)+"/"+d.slice(5,7))}</td><td class="r num">${r.km?n1(r.km):"—"}</td><td class="r num">${r.horas?n1(r.horas):"—"}</td><td class="r num g">${brl(r.ganho).replace("R$ ","")}</td><td class="r num b">${brl(r.gasto).replace("R$ ","")}</td><td class="r num ${r.lucro<0?"b":"g"}">${brl(r.lucro).replace("R$ ","")}</td></tr>${det}`; }).join("")
     :`<tr><td colspan="6" class="vazio">Nada em ${esc(nomeMes(mes))} ainda. Toque em Falar e diga com quantos km a moto começou.</td></tr>`;
 
   const porCat={}; for(const l of doMes) if(l.tipo==="gasto"){ const c=l.categoria||"Outros"; porCat[c]=(porCat[c]||0)+(Number(l.valor)||0); }
   const cats=Object.entries(porCat).sort((a,b)=>b[1]-a[1]); const max=cats.length?cats[0][1]:1;
-  $("cats").innerHTML=cats.length?cats.map(([c,v])=>`<div class="cat"><span>${esc(c)}</span><div class="bar"><i style="width:${(v/max*100).toFixed(1)}%"></i></div><span class="num">${brl(v)}</span></div>`).join("")
+  $("cats").innerHTML=cats.length?cats.map(([c,v])=>`<details class="catd" data-cat="${esc(c)}"${catsAbertas.has(c)?" open":""}><summary><div class="cat"><span>${esc(c)}</span><div class="bar"><i style="width:${(v/max*100).toFixed(1)}%"></i></div><span class="num">${brl(v)}</span></div></summary><ul class="lista">${doMes.filter(l=>l.tipo==="gasto"&&(l.categoria||"Outros")===c).map(l=>itemDetalhe(l,true)).join("")}</ul></details>`).join("")
     :`<p class="dica">Nenhum gasto em ${esc(nomeMes(mes))}.</p>`;
 
   $("linhas").innerHTML=doMes.length?doMes.map(l=>{
@@ -111,6 +140,14 @@ function render(){
     return `<tr><td class="num">${esc(String(l.data).slice(8,10)+"/"+String(l.data).slice(5,7))}</td><td>${esc(tit)}${esc(extra)}</td><td><span class="chip">${esc(km?"Km":(l.categoria||"Outros"))}</span></td><td class="r num ${km?"":(l.tipo==="ganho"?"g":"b")}">${esc(val)}</td><td class="x"><button data-del="${esc(l.id)}" aria-label="Apagar lançamento">✕</button></td></tr>`;
   }).join(""):`<tr><td colspan="5" class="vazio">Nada lançado em ${esc(nomeMes(mes))}.</td></tr>`;
 }
+
+$("dias").addEventListener("click",e=>{
+  if(editarDescricao(e)) return;
+  const tr=e.target.closest("tr[data-dia]"); if(!tr) return;
+  const d=tr.dataset.dia; if(diasAbertos.has(d)) diasAbertos.delete(d); else diasAbertos.add(d); render();
+});
+$("cats").addEventListener("click",e=>{ if(editarDescricao(e)) e.preventDefault(); });
+$("cats").addEventListener("toggle",e=>{ const c=e.target.dataset&&e.target.dataset.cat; if(!c) return; if(e.target.open) catsAbertas.add(c); else catsAbertas.delete(c); },true);
 
 $("linhas").addEventListener("click",e=>{
   const b=e.target.closest("button[data-del]"); if(!b) return;
@@ -190,7 +227,7 @@ function falar(txt){
   if(!("speechSynthesis" in window)) return;
   const u=new SpeechSynthesisUtterance(txt.replace(/→/g,"até").replace(/R\$ /g,"").replace(/[−+·]/g," ")); u.lang="pt-BR"; speechSynthesis.cancel(); speechSynthesis.speak(u);
 }
-const linhaItem = i => i.tipo==="km" ? `${n1(i.km)} km${i.horas?" em "+n1(i.horas)+" h":""}` : `${i.tipo==="ganho"?"Ganho":"Gasto"} ${brl(i.valor)}, ${i.categoria}${i.litros?", "+n1(i.litros)+" litros":""}${i.pagamento?", "+i.pagamento:""}`;
+const linhaItem = i => i.tipo==="km" ? `${n1(i.km)} km${i.horas?" em "+n1(i.horas)+" h":""}` : `${i.tipo==="ganho"?"Ganho":"Gasto"} ${brl(i.valor)}, ${i.categoria}${i.descricao?": "+i.descricao:""}${i.litros?", "+n1(i.litros)+" litros":""}${i.pagamento?", "+i.pagamento:""}`;
 
 function respondePeriodo(p){
   const h=hoje(); let lista, nome;
@@ -205,6 +242,7 @@ function respondePeriodo(p){
 function comando(texto){
   const txt=String(texto||"").trim(); if(!txt) return;
   const r=interpretar(txt,hoje());
+  if(r.pergunta==="dia"){ const a=textoDia(r.data); mes=r.data.slice(0,7); diasAbertos.add(r.data); render(); mostrar(a); falar(a); $("cmd").value=""; return; }
   if(r.pergunta){ const a=r.pergunta==="oleo"?textoOleo():respondePeriodo(r.pergunta); mostrar(a); falar(a); $("cmd").value=""; return; }
   const especiais=["inicio","fim","troca"];
   const itens=r.itens.filter(i=>!especiais.includes(i.tipo)).map(normaliza).filter(valido);

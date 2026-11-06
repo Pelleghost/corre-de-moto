@@ -43,7 +43,21 @@
   const paraNum=s=>parseFloat(String(s).replace(",","."));
   function diaAntes(hoje,n){ const [a,m,d]=hoje.split("-").map(Number); const x=new Date(a,m-1,d-n); return x.getFullYear()+"-"+String(x.getMonth()+1).padStart(2,"0")+"-"+String(x.getDate()).padStart(2,"0"); }
 
+  // sobra da frase vira a descrição: "gastei 10 reais numa porca pro escapamento" -> "Porca pro escapamento"
+  const ENCHIMENTO=/^(?:abasteci|abastecer|gastei|paguei|comprei|custou|custaram|ganhei|recebi|faturei|entrou|tirei|fiz|foi|foram|pago|paga|eu|hoje|ontem|anteontem|mais|com|numa|num|nuns|numas|uma|um|uns|umas|em|no|na|nos|nas|de|do|da|dos|das|pra|pro|pras|pros|para|por|pela|pelo|o|a|os|as)\b\s*/;
+  const SOBRA_FIM=/\s*\b(?:com|em|no|na|nos|nas|de|do|da|pra|pro|para|por|pela|pelo|o|a|os|as|hoje|ontem|anteontem|reais|real|foi|pago|paga)$/;
+  function descrever(c,acentos){
+    let s=" "+c+" ";
+    for(const [re] of PAGAMENTOS) s=s.replace(re," ");
+    s=s.replace(/\b(?:reais|real|contos?|pilas?)\b/g," ").replace(/\b(?:hoje|ontem|anteontem)\b/g," ").replace(/\bfoi pag[oa]\b/g," ").replace(/\s+/g," ").trim();
+    for(let antes="";antes!==s;){ antes=s; s=s.replace(ENCHIMENTO,"").replace(SOBRA_FIM,"").trim(); }
+    s=s.split(" ").map(w=>acentos[w]||w).join(" ");
+    return s?s[0].toUpperCase()+s.slice(1):"";
+  }
+  const semRepetir=(d,cat)=>semAcento(d)===semAcento(cat||"")?"":d;
+
   window.interpretar=function(texto,hoje){
+    const acentos={}; for(const w of String(texto).split(/[^\p{L}\p{N}]+/u)) if(w) acentos[semAcento(w)]=w.toLowerCase();
     let t=" "+semAcento(texto)+" ";
     // o ditado do celular costuma trocar "óleo" por "olha" ou "olho"
     t=t.replace(/\bolh[ao](?: o)? tro([cq])/g,"oleo tro$1").replace(/\b(troquei|trocar|trocado|troca|troca de|troca do)\s+(?:o\s+)?olh[ao]\b/g,"$1 o oleo");
@@ -52,6 +66,11 @@
     const data=/\banteontem\b/.test(t)?diaAntes(hoje,2):/\bontem\b/.test(t)?diaAntes(hoje,1):hoje;
 
     if(/\boleo\b/.test(t)&&/\bquando\b|\bqual\b|proxim|\bfalta/.test(t)&&!/\btroquei\b|\btrocado\b/.test(t)) return {itens:[],naoEntendi:[],horasSoltas:0,data,pergunta:"oleo"};
+
+    if(/\bdetalh|\bo que (?:eu )?(?:gastei|ganhei|fiz|lancei)\b|\bcomo foi\b/.test(t)){
+      const dia=t.match(/\bdia (\d{1,2})\b/);
+      return {itens:[],naoEntendi:[],horasSoltas:0,data:dia?hoje.slice(0,8)+dia[1].padStart(2,"0"):data,pergunta:"dia"};
+    }
 
     let horas=0,litros=0,m;
     if((m=t.match(/(\d+(?:[.,]\d+)?)\s*(?:h|hrs?|horas?)\b/))){ horas=paraNum(m[1]); t=t.replace(m[0]," "); }
@@ -69,18 +88,23 @@
     for(let c of partes){
       let origem=null;
       for(const [re,nome] of ORIGENS){ if(re.test(c)){ origem=nome; c=c.replace(re," "); break; } }
-      const n=c.match(/\d+(?:[.,]\d{1,2})?/);
-      if(!n) continue;
-      const v=paraNum(n[0]);
+      const n=c.match(/(\d+(?:[.,]\d{1,2})?)\s*reais/)||c.match(/\d+(?:[.,]\d{1,2})?/);
+      if(!n){
+        const u=itens[itens.length-1], d=descrever(c,acentos);
+        if(u&&ultimo&&d&&(u.tipo==="gasto"||u.tipo==="ganho")) u.descricao=u.descricao?u.descricao+" e "+d.toLowerCase():d;
+        continue;
+      }
+      const v=paraNum(n[1]||n[0]);
       if(/\b(inici|comec|abri|peguei a moto)|\bsai\b|\bsaindo\b/.test(c)){ itens.push({tipo:"inicio",hodometro:Math.round(v),data}); ultimo=null; continue; }
       if(/termin|finaliz|fechei|acabei|encerr|parei|voltei|cheguei/.test(c)){ itens.push({tipo:"fim",hodometro:Math.round(v)}); ultimo=null; continue; }
       if(/\d\s*(?:kms?|quilometros?|quilometro)\b/.test(c)||/rodei|andei/.test(c)){ itens.push({tipo:"km",km:v,horas:0,data,descricao:""}); ultimo=null; continue; }
       let cat=null; for(const [re,nome] of GASTOS){ if(re.test(c)){ cat=nome; break; } }
       const ehGanho=origem||/ganhei|recebi|faturei|entrou|tirei|\bfiz\b/.test(c);
-      const ehGasto=cat||/gastei|paguei|comprei|custou/.test(c);
+      const ehGasto=cat||/gastei|paguei|comprei|custou|\bnuma?\b/.test(c);
       let tipo=ehGasto&&!(ehGanho&&!cat)?"gasto":ehGanho?"ganho":ultimo;
       if(!tipo){ naoEntendi.push(c); continue; }
-      itens.push({tipo,valor:v,categoria:tipo==="gasto"?(cat||"Outros"):(origem||"Outros"),data,descricao:""});
+      const categoria=tipo==="gasto"?(cat||"Outros"):(origem||"Outros");
+      itens.push({tipo,valor:v,categoria,data,descricao:semRepetir(descrever(c.replace(n[0]," "),acentos),categoria)});
       ultimo=tipo;
     }
     const pagamento=(PAGAMENTOS.find(([re])=>re.test(t))||[])[1];

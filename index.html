@@ -101,6 +101,21 @@ input,select{font:inherit;color:var(--ink);background:var(--bg);border:1px solid
 .backup label{display:inline-flex;justify-content:center;font-size:1rem;color:var(--ink);background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:9px 14px;cursor:pointer}
 .backup input{display:none}
 #cmd{min-height:64px}
+tr.dia{cursor:pointer}
+.seta{color:var(--muted)}
+tr.det td{background:var(--bg);padding:6px 10px}
+.lista{list-style:none;margin:0;padding:0}
+.lista li{display:flex;justify-content:space-between;gap:12px;padding:8px 0;border-bottom:1px solid var(--line)}
+.lista li:last-child{border-bottom:0}
+.lista li>div{min-width:0}
+.lista b{display:block;font-weight:600;overflow-wrap:anywhere}
+.lista small{display:block;color:var(--muted);font-size:.8rem}
+.lista .num{white-space:nowrap}
+.lista .ed{min-height:30px;padding:0;border:0;background:none;color:var(--accent);font-size:.8rem;text-decoration:underline}
+details.catd{padding:8px 10px}
+details.catd summary{font-weight:400;list-style:none}
+details.catd summary::-webkit-details-marker{display:none}
+details.catd .lista{margin-top:6px;border-top:1px solid var(--line)}
 .oleo{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:12px 14px;display:flex;flex-direction:column;gap:8px}
 .oleo.alerta{border-color:var(--bad);border-width:2px}
 .oleo p{margin:0}
@@ -175,12 +190,13 @@ input,select{font:inherit;color:var(--ink);background:var(--bg);border:1px solid
       <textarea id="cmd" rows="2" placeholder="O que você falar aparece aqui. Também dá pra digitar."></textarea>
       <button id="enviar" class="prim">Enviar</button>
     </div>
-    <p class="dica">Exemplos: iniciei com 45320 · terminei com 45450 · ganhei 210 no iFood · abasteci 40 reais, 6 litros · óleo trocado com 76128, 40 reais no crédito · quando troco o óleo? · quanto lucrei essa semana?</p>
+    <p class="dica">Exemplos: iniciei com 45320 · terminei com 45450 · ganhei 210 no iFood · abasteci 40 reais, 6 litros · gastei 10 reais numa porca pro escapamento · óleo trocado com 76128, 40 reais no crédito · quando troco o óleo? · detalhe de ontem · quanto lucrei essa semana?</p>
     <div id="resp" class="resp" hidden></div>
   </section>
 
   <section>
     <h2>Dia a dia</h2>
+    <p class="dica" style="margin-bottom:8px">Toque num dia pra ver tudo que foi lançado nele.</p>
     <div class="tabela"><table>
       <thead><tr><th>Dia</th><th class="r">Km</th><th class="r">Horas</th><th class="r">Ganhei</th><th class="r">Gastei</th><th class="r">Lucro</th></tr></thead>
       <tbody id="dias"><tr><td colspan="6" class="vazio" id="estado">Carregando seus registros…</td></tr></tbody>
@@ -189,6 +205,7 @@ input,select{font:inherit;color:var(--ink);background:var(--bg);border:1px solid
 
   <section>
     <h2>Gastos da moto</h2>
+    <p class="dica" style="margin-bottom:8px">Toque num tipo de gasto pra ver o que foi comprado.</p>
     <div id="cats" class="cats"><p class="dica">Os gastos do mês aparecem aqui, separados por tipo.</p></div>
   </section>
 
