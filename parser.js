@@ -54,26 +54,33 @@
     s=s.split(" ").map(w=>acentos[w]||w).join(" ");
     return s?s[0].toUpperCase()+s.slice(1):"";
   }
+  // "dia 2" vale pro mês atual; se esse dia ainda não chegou, é do mês passado
+  function diaDoMes(hoje,n){
+    const [a,m]=hoje.split("-").map(Number), f=(x,y)=>x+"-"+String(y).padStart(2,"0")+"-"+String(n).padStart(2,"0");
+    const d=f(a,m); return d<=hoje?d:(m===1?f(a-1,12):f(a,m-1));
+  }
   const semRepetir=(d,cat)=>semAcento(d)===semAcento(cat||"")?"":d;
 
   window.interpretar=function(texto,hoje){
     const acentos={}; for(const w of String(texto).split(/[^\p{L}\p{N}]+/u)) if(w) acentos[semAcento(w)]=w.toLowerCase();
     let t=" "+semAcento(texto)+" ";
+    let diaFalado=null;
+    t=t.replace(/\bdia (\d{1,2})(?: de (?:janeiro|fevereiro|marco|abril|maio|junho|julho|agosto|setembro|outubro|novembro|dezembro))?\b/,(x,n)=>{ if(+n<1||+n>31) return x; diaFalado=diaDoMes(hoje,+n); return " "; });
     // o ditado do celular costuma trocar "óleo" por "olha" ou "olho"
     t=t.replace(/\bolh[ao](?: o)? tro([cq])/g,"oleo tro$1").replace(/\b(troquei|trocar|trocado|troca|troca de|troca do)\s+(?:o\s+)?olh[ao]\b/g,"$1 o oleo");
     t=t.replace(/r\$\s*(\d[\d.,]*)/g,"$1 reais ").replace(/r\$\s*/g,"").replace(/(\d)\.(?=\d{3}\b)/g,"$1").replace(/\b(\d{1,3}) (\d{3})\b/g,"$1$2");
     t=t.replace(/\b[a-z]+\b/g,w=>PALAVRAS[w]!==undefined?PALAVRAS[w]:w);
-    const data=/\banteontem\b/.test(t)?diaAntes(hoje,2):/\bontem\b/.test(t)?diaAntes(hoje,1):hoje;
+    const data=diaFalado?diaFalado:/\banteontem\b/.test(t)?diaAntes(hoje,2):/\bontem\b/.test(t)?diaAntes(hoje,1):hoje;
 
     if(/\boleo\b/.test(t)&&/\bquando\b|\bqual\b|proxim|\bfalta/.test(t)&&!/\btroquei\b|\btrocado\b/.test(t)) return {itens:[],naoEntendi:[],horasSoltas:0,data,pergunta:"oleo"};
 
     if(/\bdetalh|\bo que (?:eu )?(?:gastei|ganhei|fiz|lancei)\b|\bcomo foi\b/.test(t)){
-      const dia=t.match(/\bdia (\d{1,2})\b/);
-      return {itens:[],naoEntendi:[],horasSoltas:0,data:dia?hoje.slice(0,8)+dia[1].padStart(2,"0"):data,pergunta:"dia"};
+      return {itens:[],naoEntendi:[],horasSoltas:0,data,pergunta:"dia"};
     }
 
     let horas=0,litros=0,m;
-    if((m=t.match(/(\d+(?:[.,]\d+)?)\s*(?:h|hrs?|horas?)\b/))){ horas=paraNum(m[1]); t=t.replace(m[0]," "); }
+    if((m=t.match(/\b(\d{1,2})\s*h\s*(\d{2})\b|\b(\d{1,2})\s*horas?\s+e\s+(\d{1,2})\s*min(?:utos?)?\b/))){ horas=Math.round((+(m[1]||m[3])+(+(m[2]||m[4]))/60)*100)/100; t=t.replace(m[0]," "); }
+    else if((m=t.match(/(\d+(?:[.,]\d+)?)\s*(?:h|hrs?|horas?)\b/))){ horas=paraNum(m[1]); t=t.replace(m[0]," "); }
     if((m=t.match(/(\d+(?:[.,]\d+)?)\s*(?:l|litros?)\b/))){ litros=paraNum(m[1]); t=t.replace(m[0]," "); }
 
     const itens=[], naoEntendi=[]; let ultimo=null;

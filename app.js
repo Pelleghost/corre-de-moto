@@ -67,8 +67,8 @@ const diaMes = d => String(d).slice(8,10)+"/"+String(d).slice(5,7);
 function itemDetalhe(l,comDia){
   const dia=comDia?[diaMes(l.data)]:[];
   if(l.tipo==="km"){
-    const tit=l.kmInicial?`${fmtKm(l.kmInicial)} → ${l.kmFinal?fmtKm(l.kmFinal):"…"}`:"Km rodado";
-    const sub=[...dia,l.kmInicial&&!l.kmFinal?"em aberto":`${n1(Number(l.km)||0)} km`]; if(l.horas) sub.push(n1(Number(l.horas))+" h");
+    const tit=l.kmInicial?`${fmtKm(l.kmInicial)} → ${l.kmFinal?fmtKm(l.kmFinal):"…"}`:(l.descricao||(l.km?"Km rodado":"Horas trabalhadas"));
+    const sub=[...dia]; if(l.kmInicial&&!l.kmFinal) sub.push("em aberto"); else if(l.km) sub.push(`${n1(Number(l.km))} km`); if(l.horas) sub.push(n1(Number(l.horas))+" h");
     return `<li><div><b>${esc(tit)}</b><small>${esc(sub.join(" · "))}</small></div></li>`;
   }
   const sub=[...dia]; if(l.descricao) sub.push(l.categoria); if(l.litros) sub.push(n1(Number(l.litros))+" L"); if(l.pagamento) sub.push(l.pagamento);
@@ -254,11 +254,13 @@ function comando(texto){
   for(const it of itens){ const l=adicionar(it); desfazer.push(()=>apagar(l.id)); linhas.push(linhaItem(it)); }
   if(r.horasSoltas){
     const k=todos.filter(l=>l.tipo==="km"&&l.data===r.data).sort(recentes)[0];
-    if(k){ const antes=k.horas; k.horas=r.horasSoltas; guardar(); desfazer.push(()=>{ k.horas=antes; guardar(); }); linhas.push(`${n1(r.horasSoltas)} horas trabalhadas`); }
+    if(k){ const antes=k.horas; k.horas=r.horasSoltas; guardar(); desfazer.push(()=>{ k.horas=antes; guardar(); }); }
+    else { const l=adicionar({data:r.data,tipo:"km",km:0,horas:r.horasSoltas,descricao:"",criado:Date.now()}); desfazer.push(()=>apagar(l.id)); }
+    linhas.push(`${n1(r.horasSoltas)} horas trabalhadas`);
   }
   if(!linhas.length){ const m=`Não entendi: "${txt}". Tente assim: ganhei 210 no iFood.`; mostrar(m); falar("Não entendi. Fale de novo."); return; }
   if(odos.length&&!odos.some(o=>o.tipo==="troca")){ const av=avisoOleo(); if(av) linhas.push(av); }
-  $("cmd").value=""; if(itens[0]) mes=itens[0].data.slice(0,7); render();
+  $("cmd").value=""; if(itens[0]) mes=itens[0].data.slice(0,7); else if(r.horasSoltas) mes=r.data.slice(0,7); render();
   const fim=r.naoEntendi.length?`\nNão entendi: ${r.naoEntendi.join("; ")}`:"";
   mostrar(linhas.join("\n")+fim,desfazer); falar(linhas.join(". "));
 }
