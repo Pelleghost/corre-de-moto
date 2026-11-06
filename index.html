@@ -1,0 +1,196 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#20262c">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon-192.png">
+<title>Corre de Moto</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Barlow:wght@400;500;600&family=Share+Tech+Mono&display=swap">
+<style>
+/* Layout: painel de moto em uma coluna — hodômetro e lucro no topo, caixa de comando, indicadores por km, tabela por dia, lançamentos */
+:root{
+  --bg:#eceef0; --surface:#ffffff; --ink:#1a1f24; --muted:#5b6670; --line:#d3d8dd;
+  --accent:#b85c00; --accent-ink:#ffffff; --soft:#fbeedd; --panel:#20262c; --panel-ink:#ffc266;
+  --good:#1b7a48; --bad:#b83a2b;
+  --display:"Barlow Condensed","Arial Narrow",system-ui,sans-serif;
+  --body:"Barlow","Segoe UI",system-ui,sans-serif;
+  --mono:"Share Tech Mono",ui-monospace,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#14181c; --surface:#1d2329; --ink:#e8ecef; --muted:#9aa6b0; --line:#303941;
+  --accent:#ffa94d; --accent-ink:#1a1f24; --soft:#33291c; --panel:#0c0f12; --panel-ink:#ffc266;
+  --good:#5fcf94; --bad:#f28b7c; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#14181c; --surface:#1d2329; --ink:#e8ecef; --muted:#9aa6b0; --line:#303941;
+  --accent:#ffa94d; --accent-ink:#1a1f24; --soft:#33291c; --panel:#0c0f12; --panel-ink:#ffc266;
+  --good:#5fcf94; --bad:#f28b7c; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--body);font-size:16px;line-height:1.45;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:18px 48px}
+.wrap{max-width:720px;margin:0 auto;display:flex;flex-direction:column;gap:20px}
+h1,h2{font-family:var(--display);font-weight:700;margin:0;text-wrap:balance}
+h1{font-size:2rem;letter-spacing:.01em;text-transform:uppercase}
+h2{font-size:1.3rem;margin-bottom:8px}
+.top{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
+.mes{display:flex;align-items:center;gap:6px}
+.mes span{font-family:var(--display);font-weight:600;font-size:1.15rem;min-width:125px;text-align:center;text-transform:capitalize}
+button{font:inherit;color:var(--ink);background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:9px 14px;cursor:pointer;min-height:42px}
+button:hover{border-color:var(--accent)}
+button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible,summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+button.prim{background:var(--accent);border-color:var(--accent);color:var(--accent-ink);font-weight:600}
+button:disabled{opacity:.55;cursor:default}
+.painel{background:var(--panel);color:#f2f4f6;border-radius:10px;padding:16px;display:grid;grid-template-columns:1fr 1fr;gap:14px 18px}
+.painel small{display:block;font-size:.72rem;text-transform:uppercase;letter-spacing:.08em;color:#a9b4bd}
+.painel b{display:block;font-family:var(--mono);font-weight:400;font-size:1.35rem;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+.painel .grande{grid-column:1/-1;display:flex;justify-content:space-between;align-items:flex-end;gap:12px;flex-wrap:wrap;border-bottom:1px solid #3a444d;padding-bottom:12px}
+.painel .grande b{font-size:2.3rem;line-height:1.1}
+.odo{font-family:var(--mono);color:var(--panel-ink);font-size:1.5rem;letter-spacing:.08em;text-align:right}
+.odo em{font-style:normal;font-size:.8rem;margin-left:4px;letter-spacing:0}
+.pos{color:#7fe0ab}.neg{color:#ff9d8f}
+.ind{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+.ind div{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:10px;min-width:0}
+.ind small{display:block;color:var(--muted);font-size:.74rem;line-height:1.2}
+.ind b{font-family:var(--mono);font-weight:400;font-size:1.1rem;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+.cmd{display:flex;flex-direction:column;gap:8px}
+.row{display:flex;gap:8px}
+textarea{flex:1;min-width:0;font:inherit;color:var(--ink);background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:11px;resize:vertical;min-height:54px}
+.dica{color:var(--muted);font-size:.88rem;margin:0}
+.resp{background:var(--soft);border-radius:8px;padding:12px 14px;white-space:pre-wrap}
+.resp .acoes{margin-top:8px}
+.cmd .row{flex-direction:column}
+#cmd{min-height:120px;width:100%;border:2px solid var(--accent);font-size:1.05rem}
+#enviar{min-height:54px;font-size:1.1rem}
+
+.cats{display:flex;flex-direction:column;gap:8px}
+.cat{display:grid;grid-template-columns:minmax(0,7.5rem) 1fr auto;gap:10px;align-items:center}
+.cat>span:first-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bar{height:10px;background:var(--line);border-radius:3px;overflow:hidden}
+.bar i{display:block;height:100%;background:var(--accent)}
+.num{font-family:var(--mono);font-variant-numeric:tabular-nums}
+.tabela{overflow-x:auto;background:var(--surface);border:1px solid var(--line);border-radius:8px}
+table{width:100%;border-collapse:collapse;font-size:.93rem}
+th,td{padding:9px 10px;text-align:left;border-bottom:1px solid var(--line);vertical-align:top}
+th{font-size:.72rem;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);font-weight:500;white-space:nowrap}
+tr:last-child td{border-bottom:0}
+.r{text-align:right;white-space:nowrap}
+.g{color:var(--good)}.b{color:var(--bad)}
+.chip{display:inline-block;font-size:.76rem;padding:1px 8px;border-radius:4px;background:var(--soft);white-space:nowrap}
+td.x{width:1%}td.x button{padding:2px 8px;min-height:32px;border:0;background:none;color:var(--muted);white-space:nowrap}
+.vazio{padding:20px;color:var(--muted);text-align:center}
+details{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:12px 14px}
+summary{cursor:pointer;font-weight:600}
+form{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-top:12px}
+label{display:flex;flex-direction:column;gap:4px;font-size:.82rem;color:var(--muted)}
+input,select{font:inherit;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:9px;min-width:0;width:100%}
+.aviso{color:var(--bad);font-size:.88rem;margin:0}
+.hodo{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:12px 14px;display:flex;flex-direction:column;gap:8px}
+.hodo p{margin:0}
+#hEstado{font-family:var(--mono);font-size:1.05rem}
+.hodo .row input{flex:1;font-family:var(--mono)}
+.hodo .row button{white-space:nowrap}
+@media (max-width:520px){.ind{grid-template-columns:1fr 1fr}.painel .grande b{font-size:2rem}}
+
+.falar{display:flex;align-items:center;justify-content:center;gap:10px;width:100%;min-height:76px;background:var(--accent);border-color:var(--accent);color:var(--accent-ink);font-family:var(--display);font-weight:700;font-size:1.5rem;letter-spacing:.02em}
+.falar svg{width:28px;height:28px;fill:currentColor}
+.falar.ouvindo{background:var(--bad);border-color:var(--bad)}
+.backup{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+.backup label{display:inline-flex;justify-content:center;font-size:1rem;color:var(--ink);background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:9px 14px;cursor:pointer}
+.backup input{display:none}
+#cmd{min-height:64px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="top">
+    <h1>Corre de Moto</h1>
+    <div class="mes"><button id="ant" aria-label="Mês anterior">‹</button><span id="mesNome"></span><button id="prox" aria-label="Próximo mês">›</button></div>
+  </div>
+
+  <section class="painel" aria-label="Resumo do mês">
+    <div class="grande">
+      <div><small>Lucro do mês</small><b id="tLucro">R$ 0,00</b></div>
+      <div><small style="text-align:right">Rodado no mês</small><div class="odo"><span id="tKm">000000</span><em>km</em></div></div>
+    </div>
+    <div><small>Ganhei</small><b id="tGanho" class="pos">R$ 0,00</b></div>
+    <div><small>Gastei com a moto</small><b id="tGasto" class="neg">R$ 0,00</b></div>
+  </section>
+
+  <section class="hodo" aria-label="Hodômetro do dia">
+    <h2 style="margin:0">Hodômetro do dia</h2>
+    <p id="hEstado">Dia ainda não iniciado</p>
+    <div class="row">
+      <input id="hKm" inputmode="numeric" placeholder="Km no painel da moto" aria-label="Km no painel da moto">
+      <button id="hBtn" class="prim" type="button">Iniciar o dia</button>
+    </div>
+  </section>
+
+  <section class="ind" aria-label="Indicadores">
+    <div><small>Lucro por km</small><b id="iLucroKm">—</b></div>
+    <div><small>Custo por km</small><b id="iCustoKm">—</b></div>
+    <div><small>Lucro por hora</small><b id="iHora">—</b></div>
+    <div><small>Consumo</small><b id="iCons">—</b></div>
+  </section>
+
+  <section class="cmd">
+    <h2>Fala comigo</h2>
+    
+    <button id="falar" class="falar" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15a3 3 0 0 0 3-3V6a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.9V22h2v-3.1A7 7 0 0 0 19 12h-2z"/></svg><span id="falarTxt">Falar</span></button>
+    <div class="row">
+      <textarea id="cmd" rows="2" placeholder="O que você falar aparece aqui. Também dá pra digitar."></textarea>
+      <button id="enviar" class="prim">Enviar</button>
+    </div>
+    <p class="dica">Exemplos: iniciei com 45320 · terminei com 45450 · ganhei 210 no iFood · abasteci 40 reais, 6 litros · quanto lucrei essa semana?</p>
+    <div id="resp" class="resp" hidden></div>
+  </section>
+
+  <section>
+    <h2>Dia a dia</h2>
+    <div class="tabela"><table>
+      <thead><tr><th>Dia</th><th class="r">Km</th><th class="r">Horas</th><th class="r">Ganhei</th><th class="r">Gastei</th><th class="r">Lucro</th></tr></thead>
+      <tbody id="dias"><tr><td colspan="6" class="vazio" id="estado">Carregando seus registros…</td></tr></tbody>
+    </table></div>
+  </section>
+
+  <section>
+    <h2>Gastos da moto</h2>
+    <div id="cats" class="cats"><p class="dica">Os gastos do mês aparecem aqui, separados por tipo.</p></div>
+  </section>
+
+  <section>
+    <h2>Lançamentos do mês</h2>
+    <div class="tabela"><table>
+      <thead><tr><th>Dia</th><th>O quê</th><th>Tipo</th><th class="r">Valor / km</th><th></th></tr></thead>
+      <tbody id="linhas"><tr><td colspan="5" class="vazio">Nada lançado ainda.</td></tr></tbody>
+    </table></div>
+  </section>
+
+  <details>
+    <summary>Lançar na mão</summary>
+    <form id="form">
+      <label>O que é<select id="fTipo"><option value="ganho">Ganho</option><option value="gasto">Gasto da moto</option><option value="km">Km rodado</option></select></label>
+      <label>Data<input id="fData" type="date" required></label>
+      <label id="lValor">Valor (R$)<input id="fValor" inputmode="decimal" placeholder="0,00"></label>
+      <label id="lCat">Origem<select id="fCat"></select></label>
+      <label id="lLitros" hidden>Litros (se abasteceu)<input id="fLitros" inputmode="decimal" placeholder="0,0"></label>
+      <label id="lKm" hidden>Km rodados<input id="fKm" inputmode="decimal" placeholder="0"></label>
+      <label id="lHoras" hidden>Horas trabalhadas<input id="fHoras" inputmode="decimal" placeholder="0"></label>
+      <label>Observação<input id="fDesc" placeholder="Opcional"></label>
+      <button class="prim" type="submit">Salvar</button>
+    </form>
+  </details>
+  <details>
+    <summary>Backup dos dados</summary>
+    <p class="dica" style="margin-top:8px">Os dados ficam só neste celular. Salve uma cópia de vez em quando pra não perder se trocar de aparelho.</p>
+    <div class="backup">
+      <button id="bkSalvar" type="button">Salvar backup</button>
+      <label>Restaurar backup<input id="bkArquivo" type="file" accept="application/json,.json"></label>
+    </div>
+  </details>
+</div>
+<script src="parser.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
