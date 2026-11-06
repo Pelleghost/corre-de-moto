@@ -3,6 +3,7 @@ const ORIGENS = ["iFood","99","Uber","Lalamove","Particular","Gorjeta","Outros"]
 const CHAVE = "corre-de-moto-v1";
 const INTERVALO_OLEO = 1000; // km entre uma troca e outra
 const AVISO_OLEO = 200; // começa a avisar quando faltar isso
+const VALOR_MAX = 10000; // lançamento desse tamanho é km do painel digitado no lugar do dinheiro
 const brl = v => (v<0?"-":"") + "R$ " + Math.abs(v).toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2});
 const n1 = v => v.toLocaleString("pt-BR",{maximumFractionDigits:1});
 const ymd = d => d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
@@ -215,6 +216,7 @@ $("form").addEventListener("submit",e=>{
   e.preventDefault();
   const it=normaliza({tipo:$("fTipo").value,data:$("fData").value,valor:$("fValor").value,categoria:$("fCat").value,litros:$("fLitros").value,km:$("fKm").value,horas:$("fHoras").value,descricao:$("fDesc").value});
   if(!valido(it)) return mostrar(it.tipo==="km"?"Coloque quantos km rodou.":"Coloque um valor maior que zero.");
+  if(it.tipo!=="km"&&it.valor>=VALOR_MAX) return mostrar("Esse valor parece o km do painel. Coloque aqui o valor em reais.");
   adicionar(it); for(const id of ["fValor","fLitros","fKm","fHoras","fDesc"]) $(id).value=""; mes=it.data.slice(0,7); render(); mostrar("Salvo.");
 });
 
@@ -258,6 +260,7 @@ function comando(texto){
     else { const l=adicionar({data:r.data,tipo:"km",km:0,horas:r.horasSoltas,descricao:"",criado:Date.now()}); desfazer.push(()=>apagar(l.id)); }
     linhas.push(`${n1(r.horasSoltas)} horas trabalhadas`);
   }
+  if(!linhas.length&&r.kmPainel){ const m=`${fmtKm(r.kmPainel)} é km do painel, não dinheiro. Fale o valor também. Exemplo: abasteci 30 reais com ${fmtKm(r.kmPainel)}.`; mostrar(m); falar("Faltou o valor em reais. Fale de novo."); return; }
   if(!linhas.length){ const m=`Não entendi: "${txt}". Tente assim: ganhei 210 no iFood.`; mostrar(m); falar("Não entendi. Fale de novo."); return; }
   if(odos.length&&!odos.some(o=>o.tipo==="troca")){ const av=avisoOleo(); if(av) linhas.push(av); }
   $("cmd").value=""; if(itens[0]) mes=itens[0].data.slice(0,7); else if(r.horasSoltas) mes=r.data.slice(0,7); render();
@@ -302,5 +305,14 @@ $("bkArquivo").onchange=async e=>{
   e.target.value="";
 };
 
+// conserta lançamentos antigos em que o km do painel entrou como dinheiro; o número original fica guardado
+function consertarKmComoDinheiro(){
+  const errados=todos.filter(l=>(l.tipo==="gasto"||l.tipo==="ganho")&&Number(l.valor)>=VALOR_MAX);
+  for(const l of errados){ l.valorOriginal=l.valor; l.descricao=[l.descricao,`Valor a corrigir: ${fmtKm(l.valor)} era km, não dinheiro`].filter(Boolean).join(" · "); l.valor=0; }
+  if(errados.length) guardar();
+  return errados.length;
+}
+const consertados=consertarKmComoDinheiro();
 render();
+if(consertados) mostrar(`Corrigi ${consertados===1?"1 lançamento":consertados+" lançamentos"} em que o km do painel tinha entrado como dinheiro. Veja em Lançamentos do mês.`);
 if("serviceWorker" in navigator&&location.protocol==="https:") navigator.serviceWorker.register("sw.js").catch(()=>{});

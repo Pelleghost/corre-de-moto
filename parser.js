@@ -83,7 +83,7 @@
     else if((m=t.match(/(\d+(?:[.,]\d+)?)\s*(?:h|hrs?|horas?)\b/))){ horas=paraNum(m[1]); t=t.replace(m[0]," "); }
     if((m=t.match(/(\d+(?:[.,]\d+)?)\s*(?:l|litros?)\b/))){ litros=paraNum(m[1]); t=t.replace(m[0]," "); }
 
-    const itens=[], naoEntendi=[]; let ultimo=null;
+    const itens=[], naoEntendi=[]; let ultimo=null, kmPainel=0, catPendente=null;
     const partes=t.split(/\s*[,;]\s+|\.\s+|\s+e\s+|\s+depois\s+|\s+tambem\s+/).map(c=>c.trim()).filter(Boolean);
     let p=partes.findIndex(ehTroca);
     if(p>=0){
@@ -95,17 +95,27 @@
     for(let c of partes){
       let origem=null;
       for(const [re,nome] of ORIGENS){ if(re.test(c)){ origem=nome; c=c.replace(re," "); break; } }
-      const n=c.match(/(\d+(?:[.,]\d{1,2})?)\s*reais/)||c.match(/\d+(?:[.,]\d{1,2})?/);
+      let n=c.match(/(\d+(?:[.,]\d{1,2})?)\s*reais/)||c.match(/\d+(?:[.,]\d{1,2})?/);
       if(!n){
         const u=itens[itens.length-1], d=descrever(c,acentos);
         if(u&&ultimo&&d&&(u.tipo==="gasto"||u.tipo==="ganho")) u.descricao=u.descricao?u.descricao+" e "+d.toLowerCase():d;
         continue;
       }
-      const v=paraNum(n[1]||n[0]);
+      let v=paraNum(n[1]||n[0]);
       if(/\b(inici|comec|abri|peguei a moto)|\bsai\b|\bsaindo\b/.test(c)){ itens.push({tipo:"inicio",hodometro:Math.round(v),data}); ultimo=null; continue; }
       if(/termin|finaliz|fechei|acabei|encerr|parei|voltei|cheguei/.test(c)){ itens.push({tipo:"fim",hodometro:Math.round(v)}); ultimo=null; continue; }
-      if(/\d\s*(?:kms?|quilometros?|quilometro)\b/.test(c)||/rodei|andei/.test(c)){ itens.push({tipo:"km",km:v,horas:0,data,descricao:""}); ultimo=null; continue; }
+      if((/\d\s*(?:kms?|quilometros?|quilometro)\b/.test(c)&&!/\b\d{5,}\s*(?:kms?|quilometros?)\b/.test(c))||/rodei|andei/.test(c)){ itens.push({tipo:"km",km:v,horas:0,data,descricao:""}); ultimo=null; continue; }
       let cat=null; for(const [re,nome] of GASTOS){ if(re.test(c)){ cat=nome; break; } }
+      // número de 5 dígitos é o km do painel, nunca dinheiro
+      const painel=c.match(/\b\d{5,}\b(?![.,]\d)(?:\s*(?:kms?|quilometros?)\b)?/);
+      if(painel){
+        kmPainel=parseInt(painel[0],10); c=c.replace(painel[0]," ").replace(/\bcom\s+(?:o\s+)?(?:painel\s+)?(?:em\s+)?$/," ").trim();
+        n=c.match(/(\d+(?:[.,]\d{1,2})?)\s*reais/)||c.match(/\d+(?:[.,]\d{1,2})?/);
+        if(!n){ if(cat){ catPendente=cat; ultimo="gasto"; } continue; }
+        v=paraNum(n[1]||n[0]);
+      }
+      if(!cat&&catPendente) cat=catPendente;
+      catPendente=null;
       const ehGanho=origem||/ganhei|recebi|faturei|entrou|tirei|\bfiz\b/.test(c);
       const ehGasto=cat||/gastei|paguei|comprei|custou|\bnuma?\b/.test(c);
       let tipo=ehGasto&&!(ehGanho&&!cat)?"gasto":ehGanho?"ganho":ultimo;
@@ -116,6 +126,7 @@
     }
     const pagamento=(PAGAMENTOS.find(([re])=>re.test(t))||[])[1];
     if(pagamento) for(const i of itens) if(i.tipo==="gasto"||i.tipo==="troca") i.pagamento=pagamento;
+    if(kmPainel){ const g=itens.filter(i=>i.tipo==="gasto").pop(); if(g){ const d="com "+kmPainel.toLocaleString("pt-BR")+" km"; g.descricao=g.descricao?g.descricao+" "+d:d[0].toUpperCase()+d.slice(1); } }
     if(litros){ const g=itens.find(i=>i.categoria==="Gasolina"); if(g) g.litros=litros; }
     let horasSoltas=0;
     if(horas){ const k=itens.find(i=>i.tipo==="fim"||i.tipo==="km"); if(k) k.horas=horas; else horasSoltas=horas; }
@@ -124,6 +135,6 @@
     if(!itens.length&&/\bquanto\b|\bqual\b|\bresumo\b|\blucro\b/.test(t)){
       pergunta=/\bontem\b/.test(t)?"ontem":/\bhoje\b/.test(t)?"hoje":/semana/.test(t)?"semana":"mes";
     }
-    return {itens,naoEntendi,horasSoltas,data,pergunta};
+    return {itens,naoEntendi,horasSoltas,data,pergunta,kmPainel};
   };
 })();
