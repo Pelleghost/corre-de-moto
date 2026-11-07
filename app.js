@@ -65,16 +65,17 @@ function renderHodo(){
 }
 
 const diaMes = d => String(d).slice(8,10)+"/"+String(d).slice(5,7);
+const botaoApagar = l => `<button class="ed perigo" type="button" data-del="${esc(l.id)}">apagar</button>`;
 function itemDetalhe(l,comDia){
   const dia=comDia?[diaMes(l.data)]:[];
   if(l.tipo==="km"){
     const tit=l.kmInicial?`${fmtKm(l.kmInicial)} → ${l.kmFinal?fmtKm(l.kmFinal):"…"}`:(l.descricao||(l.km?"Km rodado":"Horas trabalhadas"));
     const sub=[...dia]; if(l.kmInicial&&!l.kmFinal) sub.push("em aberto"); else if(l.km) sub.push(`${n1(Number(l.km))} km`); if(l.horas) sub.push(n1(Number(l.horas))+" h");
-    return `<li><div><b>${esc(tit)}</b><small>${esc(sub.join(" · "))}</small></div></li>`;
+    return `<li><div><b>${esc(tit)}</b><small>${esc(sub.join(" · "))}</small>${botaoApagar(l)}</div></li>`;
   }
   const sub=[...dia]; if(l.descricao) sub.push(l.categoria); if(l.litros) sub.push(n1(Number(l.litros))+" L"); if(l.pagamento) sub.push(l.pagamento);
   const ganho=l.tipo==="ganho";
-  return `<li><div><b>${esc(l.descricao||l.categoria||"—")}</b>${sub.length?`<small>${esc(sub.join(" · "))}</small>`:""}<button class="ed" type="button" data-edit="${esc(l.id)}">${l.descricao?"editar":"descrever"}</button></div><span class="num ${ganho?"g":"b"}">${ganho?"+":"−"} ${esc(brl(Number(l.valor)||0).replace("R$ ",""))}</span></li>`;
+  return `<li><div><b>${esc(l.descricao||l.categoria||"—")}</b>${sub.length?`<small>${esc(sub.join(" · "))}</small>`:""}<button class="ed" type="button" data-edit="${esc(l.id)}">${l.descricao?"editar":"descrever"}</button>${botaoApagar(l)}</div><span class="num ${ganho?"g":"b"}">${ganho?"+":"−"} ${esc(brl(Number(l.valor)||0).replace("R$ ",""))}</span></li>`;
 }
 function editarDescricao(e){
   const b=e.target.closest("button[data-edit]"); if(!b) return false;
@@ -150,10 +151,13 @@ $("dias").addEventListener("click",e=>{
 $("cats").addEventListener("click",e=>{ if(editarDescricao(e)) e.preventDefault(); });
 $("cats").addEventListener("toggle",e=>{ const c=e.target.dataset&&e.target.dataset.cat; if(!c) return; if(e.target.open) catsAbertas.add(c); else catsAbertas.delete(c); },true);
 
-$("linhas").addEventListener("click",e=>{
+// apagar pede um segundo toque e ainda deixa desfazer
+document.addEventListener("click",e=>{
   const b=e.target.closest("button[data-del]"); if(!b) return;
-  if(b.dataset.ok!=="1"){ b.dataset.ok="1"; b.textContent="apagar?"; b.style.color="var(--bad)"; setTimeout(()=>{ if(b.isConnected){ b.dataset.ok=""; b.textContent="✕"; b.style.color=""; } },3000); return; }
-  apagar(b.dataset.del); render();
+  if(b.dataset.ok!=="1"){ const antes=b.textContent; b.dataset.ok="1"; b.textContent=antes==="✕"?"apagar?":"toque de novo pra apagar"; b.style.color="var(--bad)"; setTimeout(()=>{ if(b.isConnected){ b.dataset.ok=""; b.textContent=antes; b.style.color=""; } },3000); return; }
+  const l=todos.find(x=>x.id===b.dataset.del); if(!l) return;
+  apagar(l.id); render();
+  mostrar(`Apaguei: ${l.descricao||l.categoria||"lançamento"}${l.valor?" "+brl(Number(l.valor)):""}.`,[()=>{ todos=[...todos,l]; guardar(); }]);
 });
 
 function iniciar(valor,data){
@@ -241,13 +245,26 @@ function respondePeriodo(p){
   return `${nome}: lucro de ${brl(r.lucro)}. Ganhou ${brl(r.ganho)}, gastou ${brl(r.gasto)} e rodou ${n1(r.km)} km.`;
 }
 
-function comando(texto){
+let ultimoComando={txt:"",quando:0};
+const REPETICAO_MS=120000; // mesma frase nesse intervalo costuma ser envio repetido
+function comando(texto,forcar){
   const txt=String(texto||"").trim(); if(!txt) return;
   const r=interpretar(txt,hoje());
   if(r.pergunta==="dia"){ const a=textoDia(r.data); mes=r.data.slice(0,7); diasAbertos.add(r.data); render(); mostrar(a); falar(a); $("cmd").value=""; return; }
   if(r.pergunta){ const a=r.pergunta==="oleo"?textoOleo():respondePeriodo(r.pergunta); mostrar(a); falar(a); $("cmd").value=""; return; }
   const especiais=["inicio","fim","troca"];
-  const itens=r.itens.filter(i=>!especiais.includes(i.tipo)).map(normaliza).filter(valido);
+  const chaveTxt=txt.toLowerCase();
+  if(!forcar&&r.itens.length&&ultimoComando.txt===chaveTxt&&Date.now()-ultimoComando.quando<REPETICAO_MS){
+    mostrar("Você acabou de lançar essa mesma frase. Não lancei de novo.");
+    const a=document.createElement("div"); a.className="acoes"; const b=document.createElement("button"); b.textContent="Lançar mesmo assim"; b.onclick=()=>comando(txt,true); a.append(b); $("resp").append(a);
+    falar("Essa frase já foi lançada."); $("cmd").value=""; return;
+  }
+  // o ditado às vezes repete o trecho: o mesmo gasto duas vezes na frase vale uma vez só
+  const vistos=new Set(); let repetidos=0;
+  const itens=r.itens.filter(i=>!especiais.includes(i.tipo)).map(normaliza).filter(valido).filter(i=>{
+    if(i.tipo!=="gasto"&&i.tipo!=="ganho") return true;
+    const k=[i.tipo,i.valor,i.categoria,i.data].join("|"); if(vistos.has(k)){ repetidos++; return false; } vistos.add(k); return true;
+  });
   const odos=r.itens.filter(i=>especiais.includes(i.tipo));
   const desfazer=[], linhas=[];
   try{
@@ -262,6 +279,8 @@ function comando(texto){
   }
   if(!linhas.length&&r.kmPainel){ const m=`${fmtKm(r.kmPainel)} é km do painel, não dinheiro. Fale o valor também. Exemplo: abasteci 30 reais com ${fmtKm(r.kmPainel)}.`; mostrar(m); falar("Faltou o valor em reais. Fale de novo."); return; }
   if(!linhas.length){ const m=`Não entendi: "${txt}". Tente assim: ganhei 210 no iFood.`; mostrar(m); falar("Não entendi. Fale de novo."); return; }
+  if(repetidos) linhas.push("O valor veio repetido na frase, lancei uma vez só.");
+  ultimoComando={txt:chaveTxt,quando:Date.now()};
   if(odos.length&&!odos.some(o=>o.tipo==="troca")){ const av=avisoOleo(); if(av) linhas.push(av); }
   $("cmd").value=""; if(itens[0]) mes=itens[0].data.slice(0,7); else if(r.horasSoltas) mes=r.data.slice(0,7); render();
   const fim=r.naoEntendi.length?`\nNão entendi: ${r.naoEntendi.join("; ")}`:"";
